@@ -59,7 +59,7 @@ class Statistics:
     associated with each .dat file as it is run through each
     algorithm. This helps with decent looking output.
     """
-    def __init__(self, hits, misses, hit_ratio, reads, writes, access_ratio, total_refs):
+    def __init__(self, hits, misses, hit_ratio, reads, writes, reads_ratio, writes_ratio, total_refs):
         """
         initializes values for new Statistics object t
         :param hits:
@@ -67,7 +67,8 @@ class Statistics:
         :param hit_ratio:
         :param reads:
         :param writes:
-        :param access_ratio:
+        :param reads_ratio:
+        :param writes_ratio:
         :param total_refs:
         """
         self.hits = hits
@@ -75,7 +76,8 @@ class Statistics:
         self.hit_ratio = hit_ratio
         self.reads = reads
         self.writes = writes
-        self.access_ratio = access_ratio
+        self.reads_ratio = reads_ratio
+        self.writes_ratio = writes_ratio
         self.total_refs = total_refs
 
     def __str__(self):
@@ -90,7 +92,8 @@ class Statistics:
               f"Page table hit Ratio: {self.hit_ratio}\n\n" \
               f"Total # of Reads: {self.reads}\n" \
               f"Total # of Writes: {self.writes}\n" \
-              f"Read / Write Ratio: {self.access_ratio}\n" \
+              f"Ratio of Reads: {self.reads_ratio}\n" \
+              f"Ratio of Writes: {self.writes_ratio}\n" \
               f"Total # of references: {self.total_refs}"
         return out
 
@@ -159,7 +162,7 @@ def fifo(traces_list):
     # empty list to store traces after ran through fifo
     FIFOtraces = []
     # creates empty statistic object to be incremented during run
-    stats = Statistics(0, 0, 0, 0, 0, 0, 0)
+    stats = Statistics(0, 0, 0, 0, 0, 0, 0, 0)
     # Idk if this is smart, but firstOUT is a list I used as a queue
     # to track which physical page number needs dumped first.
     firstOUT = []
@@ -204,9 +207,10 @@ def fifo(traces_list):
             nextIn = 0
         FIFOtraces.append(instr)
     # update last stats
-    stats.hit_ratio = stats.hits / stats.misses
-    stats.access_ratio = stats.reads / stats.writes
     stats.total_refs = stats.reads + stats.writes
+    stats.hit_ratio = stats.hits / stats.total_refs
+    stats.reads_ratio = stats.reads / stats.total_refs
+    stats.writes_ratio = stats.writes / stats.total_refs
     return FIFOtraces, stats
 
 
