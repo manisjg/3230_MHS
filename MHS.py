@@ -5,7 +5,7 @@ tk.Tk().withdraw()
 # TODO for MVP  - Display configuration
 #               - Implement LRU
 #               - Implement Optimal(offline) greedy algorithm
-#               - ^^ IDK what this is ^^
+#               - ^^ DONE???? ^^
 
 
 class Trace:
@@ -214,10 +214,143 @@ def fifo(traces_list):
     return FIFOtraces, stats
 
 
+def greedy(traces_list):
+    """
+    accepts a list of traces after read__dat(),
+    runs each memory reference through a dictionary with the optimal
+    (offline) greedy algorithm, ( Furthest in future page replacement)
+    During the algorithm, it tracks stats in a Statistics
+    object, as well as updating the trace instance as it finds the
+    values of page table result and physical page number.
+
+    Returns the list of updated traces and the statistics object:
+    This is read later like: outputList, outputStats = greedy(traces)
+    :param traces_list:
+    :return:
+    """
+    # the page table is a dictionary with 4 physical page numbers
+    # (the keys of the dict) and the values (virtual page numbers)
+    # for each key are initialized to -1 for empty
+    # I probably didn't do this very dynamically; might make it
+    # relatively difficult to work with later if we work on the
+    # exceeds to make this configurable, whoops sorry.
+    pageTable = dict([(0, -1), (1, -1), (2, -1), (3, -1)])
+    # empty list to store traces after ran through fifo
+    greedyTraces = []
+    # creates empty statistic object to be incremented during run
+    stats = Statistics(0, 0, 0, 0, 0, 0, 0, 0)
+    # next in is a counter to track next page number to write to until full.
+    nextIn = 0
+    # loop through list of traces
+    c = 0
+    for t in range(len(traces_list)):
+        instr = traces_list.pop(0)
+        # count access types.
+        if instr.type_rw == "R":
+            stats.reads += 1
+        if instr.type_rw == "W":
+            stats.writes += 1
+        # loops through dict assigning misses vs hits
+        for phys, virt in pageTable.items():
+            if virt != instr.v_pg_num:
+                instr.pt_res = "Miss"
+            else:
+                instr.pt_res = " Hit"
+                instr.phys_pg_num = phys
+                stats.hits += 1
+                break
+        # do nothing on hit, but add to page table if miss
+
+        # if page table not yet full
+        if instr.pt_res == "Miss" and pageTable[3] == -1:
+            pageTable.update(({nextIn: instr.v_pg_num}))
+            instr.phys_pg_num = nextIn
+            nextIn += 1
+            stats.misses += 1
+
+        # if needs booted, count how far in future each current resident of dictionary is used and boot farthest.
+        # if page table full and must boot someone
+        elif instr.pt_res == "Miss" and pageTable[3] != -1:
+            # safe = 1, boot = 0
+            future0 = 0
+            future1 = 0
+            future2 = 0
+            future3 = 0
+            counter = 0
+            for tr in traces_list:
+                counter += 1
+                # print statements just to help make sure it works/ can delete or comment out
+                # if updates a holder for how far away the next reference is per page
+                # only if page holder not updated yet (with the 'and not' logic)
+                if pageTable[0] == tr.v_pg_num and not future0:
+                    future0 += counter
+                    print("0: " + str(future0))
+                elif pageTable[1] == tr.v_pg_num and not future1:
+                    future1 += counter
+                    print("1: " + str(future1))
+
+                elif pageTable[2] == tr.v_pg_num and not future2:
+                    future2 += counter
+                    print("2: " + str(future2))
+
+                elif pageTable[3] == tr.v_pg_num and not future3:
+                    future3 += counter
+                    print("3: " + str(future3))
+                # stops trying to find when last page is referenced if already have 3
+                # this is because no matter when it is, it will be the furthest in future
+                if future0 and future1 and future2 and not future3:
+                    break
+                if future3 and future1 and future2 and not future0:
+                    break
+                if future0 and future3 and future2 and not future1:
+                    break
+                if future0 and future3 and future1 and not future2:
+                    break
+            # if any are uncounted (either because it isnt referenced again, or
+            # because of the bail-out logic above) the first page uncounted is booted
+            if not future0 or not future1 or not future2 or not future3:
+                if future0 == 0:
+                    physIn = 0
+                elif future1 == 0:
+                    physIn = 1
+                elif future2 == 0:
+                    physIn = 2
+                elif future3 == 0:
+                    physIn = 3
+            # I think unneeded, but just in case, picks max fif reference to
+            else:
+                booter = max(future0, future1, future2, future3)
+                if booter == future0:
+                    physIn = 0
+                elif booter == future1:
+                    physIn = 1
+                elif booter == future2:
+                    physIn = 2
+                elif booter == future3:
+                    physIn = 3
+            # updates one page of page table (determined above) with newest virtual page num
+            pageTable.update(({physIn: instr.v_pg_num}))
+            instr.phys_pg_num = physIn
+            nextIn += 1
+            stats.misses += 1
+            c += 1
+        print(pageTable)
+        # keeps counter within page table bounds
+        if nextIn == 4:
+            nextIn = 0
+        greedyTraces.append(instr)
+    # update last stats
+    stats.total_refs = stats.reads + stats.writes
+    stats.hit_ratio = stats.hits / stats.total_refs
+    stats.reads_ratio = stats.reads / stats.total_refs
+    stats.writes_ratio = stats.writes / stats.total_refs
+    return greedyTraces, stats
+
+
 # reads file into list of Trace objects
 traces = read_dat()
 # Gets list of updated Traces and Statistics objects from FIFO
-outputList, outputStats = fifo(traces)
+outputList, outputStats = greedy(traces)
 # outputs header based on virtual address size for pretty formatting
 # before outputting each Trace object in list and then the stats
 if len(outputList[1].v_add) > 3:
