@@ -2,10 +2,6 @@ import os
 import tkinter as tk
 from tkinter.filedialog import askopenfilename
 tk.Tk().withdraw()
-# TODO for MVP  - Display configuration
-#               - Implement LRU
-#               - Implement Optimal(offline) greedy algorithm
-#               - ^^ DONE???? ^^
 
 
 class Trace:
@@ -41,8 +37,7 @@ class Trace:
         virtual address.
         :return:
         """
-        # currently doesn't output very cleanly (still correctish just ugly)
-        # ("------\t--------\t------\t----\t----\t----")
+
         if len(self.v_add) > 6:
             return f"    {self.type_rw}\t{self.v_add}\t     {self.v_pg_num}\t  {self.pg_off}\t{self.pt_res}\t   {self.phys_pg_num}"
         elif len(self.v_add) > 3:
@@ -51,8 +46,6 @@ class Trace:
             return f"     {self.type_rw}\t00000{self.v_add}\t     {self.v_pg_num}\t  {self.pg_off}\t{self.pt_res}\t   {self.phys_pg_num}"
 
 
-# I don't think this needs to be just for FIFO, we should probably
-# refactor it to be called "Statistics" and reuse for other algos
 class Statistics:
     """
     The purpose of this class is to be a placeholder for the stats
@@ -137,6 +130,90 @@ def read_dat():
         dats.append(d)
     # print(dats[1])
     return dats
+
+
+def lru(traces_list):
+    """
+    accepts a list of traces after read__dat(),
+    runs each memory reference through a dictionary with the FIFO
+    algorithm. During the algorithm, it tracks stats in a Statistics
+    object, as well as updating the trace instance as it finds the
+    values of page table result and physical page number.
+
+    Returns the list of updated traces and the statistics object:
+    This is read later like: outputList, outputStats = fifo(traces)
+    :param traces_list:
+    :return:
+    """
+    # the page table is a dictionary with 4 physical page numbers
+    # (the keys of the dict) and the values (virtual page numbers)
+    # for each key are initialized to -1 for empty
+    # the lru table is a dictionary with 4 physical page numbers
+    # to match, with the associated values being a counter for lru
+    # I probably didn't do this very dynamically; might make it
+    # relatively difficult to work with later if we work on the
+    # exceeds to make this configurable, whoops sorry.
+    pageTable = dict([(0, -1), (1, -1), (2, -1), (3, -1)])
+    lruTable = dict([(0, -99), (1, -99), (2, -99), (3, -99)])
+
+    # empty list to store traces after ran through LRU
+    lruTraces = []
+    # creates empty statistic object to be incremented during run
+    stats = Statistics(0, 0, 0, 0, 0, 0, 0, 0)
+
+    # nextIn is a counter to track which page number is written to.
+    nextIn = 0
+    # loop through list of traces
+    for t in range(len(traces_list)):
+        for page, used in lruTable.items():
+            lruTable[page] = used + 1
+        instr = traces_list.pop(0)
+        # count access types
+        if instr.type_rw == "R":
+            stats.reads += 1
+        if instr.type_rw == "W":
+            stats.writes += 1
+        # loops through dict assigning misses vs hits
+        for phys, virt in pageTable.items():
+            if virt != instr.v_pg_num:
+                instr.pt_res = "Miss"
+            else:
+                instr.pt_res = " Hit"
+                instr.phys_pg_num = phys
+                stats.hits += 1
+                lruTable.update({phys: 0})
+                break
+        # do nothing(except increment counters) on hit,
+        # but add to page table if miss
+
+        # if page table not yet full
+        if instr.pt_res == "Miss" and pageTable[3] == -1:
+            pageTable.update(({nextIn: instr.v_pg_num}))
+            instr.phys_pg_num = nextIn
+            lruTable.update({nextIn: 0})
+            nextIn += 1
+            stats.misses += 1
+        # if page table full and must boot someone
+        elif instr.pt_res == "Miss" and pageTable[3] != -1:
+            physIn = int(max(lruTable, key=lruTable.get))
+            pageTable.update(({physIn: instr.v_pg_num}))
+            instr.phys_pg_num = physIn
+            lruTable.update({physIn: 0})
+            nextIn += 1
+            stats.misses += 1
+        # keeps counter within page table bounds
+        if nextIn == 4:
+            nextIn = 0
+        lruTraces.append(instr)
+        print(instr.pt_res)
+        print(pageTable)
+        print(lruTable)
+    # update last stats
+    stats.total_refs = stats.reads + stats.writes
+    stats.hit_ratio = stats.hits / stats.total_refs
+    stats.reads_ratio = stats.reads / stats.total_refs
+    stats.writes_ratio = stats.writes / stats.total_refs
+    return lruTraces, stats
 
 
 def fifo(traces_list):
@@ -350,9 +427,15 @@ def greedy(traces_list):
 # reads file into list of Trace objects
 traces = read_dat()
 # Gets list of updated Traces and Statistics objects from FIFO
-outputList, outputStats = greedy(traces)
+outputList, outputStats = lru(traces)
 # outputs header based on virtual address size for pretty formatting
 # before outputting each Trace object in list and then the stats
+configuration = "Page Table Configuration\n" \
+                "Number of physical pages is 4.\n" \
+                "Hex addresses are between 12 and 32 bits.\n" \
+                "The first significant hex character is used to represent the virtual page number.\n" \
+                "The rest of the address is the page offset."
+print(configuration)
 if len(outputList[1].v_add) > 3:
     header = "Access\tVirtual \tVirt. \t  Page   \tPT  \tPhys\n"\
            + "  Type\tAddress \tPage #\t  Offset \tRes.\tPg #\n"\
