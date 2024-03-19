@@ -424,6 +424,68 @@ def greedy(traces_list):
     return greedyTraces, stats
 
 
+
+
+import random
+
+
+def randommem(traces):
+    """
+    Simulates memory management using a random eviction algorithm.
+
+    Args:
+    - traces (list): List of memory traces.
+
+    Returns:
+    - updated_traces (list): Updated list of memory traces.
+    - stats (Statistics): Statistics object containing simulation results.
+    """
+    # Initialize page table with 4 physical pages
+    page_table = {0: -1, 1: -1, 2: -1, 3: -1}
+    # Empty list to store updated traces
+    updated_traces = []
+    # Initialize statistics object
+    stats = Statistics(0, 0, 0, 0, 0, 0, 0, 0)
+
+    for t in range(len(traces)):
+            instr = traces.pop(0)
+            if instr.type_rw == "R":
+                stats.reads += 1
+            if instr.type_rw == "W":
+                stats.writes += 1
+
+            instr.pt_res = "Miss"
+            for phys, virt in page_table.items():
+                if virt == instr.v_pg_num:
+                    instr.pt_res = "Hit"
+                    instr.phys_pg_num = phys
+                    stats.hits += 1
+                    break
+
+            if instr.pt_res == "Miss":
+                if -1 in page_table.values():
+                    empty_phys = list(page_table.values()).index(-1)
+                    empty_phys_key = list(page_table.keys())[empty_phys]
+                    page_table[empty_phys_key] = instr.v_pg_num
+                    instr.phys_pg_num = empty_phys_key
+                    stats.misses += 1
+                else:
+                    physIn = random.choice(list(page_table.keys()))
+                    page_table[physIn] = instr.v_pg_num
+                    instr.phys_pg_num = physIn
+                    stats.misses += 1
+
+            updated_traces.append(instr)
+
+    stats.total_refs = stats.reads + stats.writes
+    stats.hit_ratio = stats.hits / stats.total_refs
+    stats.reads_ratio = stats.reads / stats.total_refs
+    stats.writes_ratio = stats.writes / stats.total_refs
+
+    return updated_traces, stats
+
+
+
 # reads file into list of Trace objects
 traces = read_dat()
 # Gets list of updated Traces and Statistics objects from FIFO
